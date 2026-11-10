@@ -35,13 +35,14 @@
  #infoDetails{font-size:10px}
 }
 </style></head>
-<body><canvas id="game"></canvas><div id="hud"><span>💎 <b id="minerals">200</b></span><span>👥 <b id="supply">1 / 10</b></span><span>🏢 Frontier Defense v1.8.1</span></div><div id="hint">Tap to select · Double-tap to order · Swipe to pan · Pinch to zoom.</div><div id="deposit"></div><div id="placementControls"><button id="confirmPlacement" aria-label="Confirm building position">✓</button><button id="cancelPlacement" aria-label="Cancel building placement">✕</button></div><div id="bottomHud"><div id="controls"><canvas class="panel" id="map" width="210" height="164"></canvas></div><div id="infoPanel"><div id="infoName">NO SELECTION</div><div id="infoBody"><div id="infoPortrait">⌖</div><div id="infoDetails">Tap a unit or building</div></div><div id="infoQueue"></div></div><div id="commandPanel"><div id="panelTitle">COMMANDS</div><div id="actions"></div><div id="production"><h3>Production</h3><div id="slots"></div><button id="train">🔧 Train SCV · 💎 50 · 10s</button></div></div></div>
+<body><canvas id="game"></canvas><div id="hud"><span>💎 <b id="minerals">200</b></span><span>👥 <b id="supply">1 / 10</b></span><span>🏢 Frontier Defense v1.9</span></div><div id="hint">PC: Left-click select · Right-click order · Drag select · WASD pan · Esc deselect. Touch controls remain available.</div><div id="deposit"></div><div id="placementControls"><button id="confirmPlacement" aria-label="Confirm building position">✓</button><button id="cancelPlacement" aria-label="Cancel building placement">✕</button></div><div id="bottomHud"><div id="controls"><canvas class="panel" id="map" width="210" height="164"></canvas></div><div id="infoPanel"><div id="infoName">NO SELECTION</div><div id="infoBody"><div id="infoPortrait">⌖</div><div id="infoDetails">Tap a unit or building</div></div><div id="infoQueue"></div></div><div id="commandPanel"><div id="panelTitle">COMMANDS</div><div id="actions"></div><div id="production"><h3>Production</h3><div id="slots"></div><button id="train">🔧 Train SCV · 💎 50 · 10s</button></div></div></div>
 <script>
 (()=>{'use strict';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d'),mini=document.querySelector('#map'),mc=mini.getContext('2d'),actions=document.querySelector('#actions'),hint=document.querySelector('#hint'),production=document.querySelector('#production'),slots=document.querySelector('#slots'),train=document.querySelector('#train'),deposit=document.querySelector('#deposit');
 let W=0,H=0,dpr=1,zoom=1,cam={x:1100,y:850},money=200,selected=null,selectedMineral=null,placing=false,buildMenu=false,buildType=null,ghost=null,joyX=0,joyY=0,drag=null,last=performance.now(),touches=new Map(),pinch=0,commandMode=null;
 const world={w:2800,h:2100},base={x:1400,y:1050,r:48,hp:1500,maxHp:1500,damage:0,range:0,attackCooldown:0},units=[makeSCV(1510,1110)],minerals=[{x:1135,y:825,n:1500},{x:1195,y:800,n:1500},{x:1255,y:790,n:1500},{x:1315,y:800,n:1500},{x:1095,y:885,n:1500},{x:1075,y:945,n:1500},{x:1085,y:1005,n:1500},{x:1125,y:1065,n:1500}],depots=[],barracks=[],shops=[],bunkers=[],turrets=[],marines=[],firebats=[],goliaths=[],tanks=[],trees=[],rocks=[],queue=[];let nextId=2,queueElapsed=0;
-// Economy: each mineral patch holds 1500; SCVs carry 8 per trip. Gas costs are not yet implemented.\n// Combat statistics: damage per attack, range in world units, cooldown in seconds.
+// Economy: each mineral patch holds 1500; SCVs carry 8 per trip. Gas costs are not yet implemented.
+// Combat statistics: damage per attack, range in world units, cooldown in seconds.
 const UNIT_STATS={
  scv:{hp:60,damage:5,range:24,cooldown:1.5,speed:115,attack:'melee'},
  marine:{hp:45,damage:6,range:155,cooldown:.86,speed:125,attack:'ranged'},
@@ -154,10 +155,49 @@ canvas.addEventListener('touchstart',e=>{e.preventDefault();for(const t of e.cha
 canvas.addEventListener('touchmove',e=>{e.preventDefault();for(const t of e.changedTouches)moveTouch(t.identifier,t.clientX,t.clientY)},{passive:false});
 canvas.addEventListener('touchend',e=>{e.preventDefault();for(const t of e.changedTouches)endTouch(t.identifier,t.clientX,t.clientY)},{passive:false});
 canvas.addEventListener('touchcancel',e=>{e.preventDefault();for(const t of e.changedTouches)endTouch(t.identifier,t.clientX,t.clientY,true)},{passive:false});
-canvas.addEventListener('pointerdown',e=>{if(e.pointerType==='touch')return;canvas.setPointerCapture(e.pointerId);startTouch(e.pointerId,e.clientX,e.clientY)});
-canvas.addEventListener('pointermove',e=>{if(e.pointerType==='touch')return;moveTouch(e.pointerId,e.clientX,e.clientY)});
-canvas.addEventListener('pointerup',e=>{if(e.pointerType==='touch')return;endTouch(e.pointerId,e.clientX,e.clientY)});
-canvas.addEventListener('pointercancel',e=>{if(e.pointerType==='touch')return;endTouch(e.pointerId,e.clientX,e.clientY,true)});
+// Desktop mouse controls. Touch handlers above remain intact for mobile.
+let mouseDown=null;
+canvas.addEventListener('pointerdown',e=>{
+ if(e.pointerType==='touch')return;
+ e.preventDefault();
+ if(e.button===2){if(placing){ghost=worldPt(e.clientX,e.clientY);order(ghost)}else smartOrder(worldPt(e.clientX,e.clientY));return}
+ if(e.button!==0)return;
+ canvas.setPointerCapture(e.pointerId);
+ mouseDown={x:e.clientX,y:e.clientY,dragging:false};
+});
+canvas.addEventListener('pointermove',e=>{
+ if(e.pointerType==='touch')return;
+ if(placing&&(!mouseDown||!mouseDown.dragging)){ghost=worldPt(e.clientX,e.clientY);updatePlacementControls()}
+ if(mouseDown&&Math.hypot(e.clientX-mouseDown.x,e.clientY-mouseDown.y)>10)mouseDown.dragging=true;
+});
+canvas.addEventListener('pointerup',e=>{
+ if(e.pointerType==='touch'||e.button!==0||!mouseDown)return;
+ const m=mouseDown;mouseDown=null;
+ if(placing){ghost=worldPt(e.clientX,e.clientY);updatePlacementControls();return}
+ if(m.dragging){
+  // Box-select: select the first friendly unit within the dragged rectangle.
+  const left=Math.min(m.x,e.clientX),right=Math.max(m.x,e.clientX),top=Math.min(m.y,e.clientY),bottom=Math.max(m.y,e.clientY);
+  const candidates=[...units.map(u=>({kind:'unit',u})),...troops().filter(u=>!u.garrison).map(u=>({kind:u.kind,u}))];
+  const match=candidates.find(({u})=>{const p=screenPt(u.x,u.y);return p.x>=left&&p.x<=right&&p.y>=top&&p.y<=bottom});
+  if(match){selectAt({x:match.u.x,y:match.u.y});msg('Unit selected (multi-unit groups coming soon)')}
+  else{selected=null;selectedTroop=null;selectedBuilding=null;selectedMineral=null;buttons()}
+ }else selectAt(worldPt(e.clientX,e.clientY));
+});
+canvas.addEventListener('pointercancel',e=>{if(e.pointerType!=='touch')mouseDown=null});
+canvas.addEventListener('wheel',e=>{e.preventDefault();zoom=Math.max(.55,Math.min(1.8,zoom*(e.deltaY<0?1.1:.9)));clampCam()},{passive:false});
+document.addEventListener('keydown',e=>{
+ if(['INPUT','TEXTAREA'].includes(document.activeElement?.tagName))return;
+ const key=e.key.toLowerCase(),step=90/zoom;
+ if(key==='escape'){if(placing)cancelPlacement();else{selected=null;selectedTroop=null;selectedBuilding=null;selectedMineral=null;commandMode=null;buildMenu=false;buttons()}e.preventDefault();return}
+ if(key==='w'||key==='arrowup')cam.y-=step;
+ else if(key==='s'||key==='arrowdown')cam.y+=step;
+ else if(key==='a'||key==='arrowleft')cam.x-=step;
+ else if(key==='d'||key==='arrowright')cam.x+=step;
+ else if(key==='b'&&selectedUnit()){buildMenu=!buildMenu;buttons()}
+ else if(key===' '){cam.x=base.x;cam.y=base.y}
+ else return;
+ clampCam();e.preventDefault();
+});
 mini.addEventListener('pointerdown',e=>{let r=mini.getBoundingClientRect();cam.x=(e.clientX-r.left)/r.width*world.w;cam.y=(e.clientY-r.top)/r.height*world.h;clampCam()});
 function approach(u,x,y,speed,dt){let dx=x-u.x,dy=y-u.y,d=Math.hypot(dx,dy);if(d<=speed*dt){u.x=x;u.y=y;return true}u.x+=dx/d*speed*dt;u.y+=dy/d*speed*dt;return false}
 
