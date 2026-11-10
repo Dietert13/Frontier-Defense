@@ -35,7 +35,7 @@
  #infoDetails{font-size:10px}
 }
 </style></head>
-<body><canvas id="game"></canvas><div id="hud"><span>💎 <b id="minerals">200</b></span><span>👥 <b id="supply">1 / 10</b></span><span>🏢 Frontier Defense v1.5.1</span></div><div id="hint">Tap a unit or building to select. Swipe to pan. Pinch to zoom.</div><div id="deposit"></div><div id="placementControls"><button id="confirmPlacement" aria-label="Confirm building position">✓</button><button id="cancelPlacement" aria-label="Cancel building placement">✕</button></div><div id="bottomHud"><div id="controls"><canvas class="panel" id="map" width="210" height="164"></canvas></div><div id="infoPanel"><div id="infoName">NO SELECTION</div><div id="infoBody"><div id="infoPortrait">⌖</div><div id="infoDetails">Tap a unit or building</div></div><div id="infoQueue"></div></div><div id="commandPanel"><div id="panelTitle">COMMANDS</div><div id="actions"></div><div id="production"><h3>Production</h3><div id="slots"></div><button id="train">🔧 Train SCV · 💎 20 · 10s</button></div></div></div>
+<body><canvas id="game"></canvas><div id="hud"><span>💎 <b id="minerals">200</b></span><span>👥 <b id="supply">1 / 10</b></span><span>🏢 Frontier Defense v1.6</span></div><div id="hint">Tap a unit or building to select. Swipe to pan. Pinch to zoom.</div><div id="deposit"></div><div id="placementControls"><button id="confirmPlacement" aria-label="Confirm building position">✓</button><button id="cancelPlacement" aria-label="Cancel building placement">✕</button></div><div id="bottomHud"><div id="controls"><canvas class="panel" id="map" width="210" height="164"></canvas></div><div id="infoPanel"><div id="infoName">NO SELECTION</div><div id="infoBody"><div id="infoPortrait">⌖</div><div id="infoDetails">Tap a unit or building</div></div><div id="infoQueue"></div></div><div id="commandPanel"><div id="panelTitle">COMMANDS</div><div id="actions"></div><div id="production"><h3>Production</h3><div id="slots"></div><button id="train">🔧 Train SCV · 💎 20 · 10s</button></div></div></div>
 <script>
 (()=>{'use strict';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d'),mini=document.querySelector('#map'),mc=mini.getContext('2d'),actions=document.querySelector('#actions'),hint=document.querySelector('#hint'),production=document.querySelector('#production'),slots=document.querySelector('#slots'),train=document.querySelector('#train'),deposit=document.querySelector('#deposit');
@@ -71,8 +71,8 @@ function refreshInfo(){const name=document.querySelector('#infoName'),portrait=d
 function positionOverlays(){
 if(selectedMineral&&selectedMineral.n>0){let p=screenPt(selectedMineral.x,selectedMineral.y);if(p.x<-40||p.x>W+40||p.y<-40||p.y>H+40){deposit.style.display='none'}else{deposit.style.display='block';deposit.textContent='💎 '+selectedMineral.n+'/1000';deposit.style.left=Math.max(6,Math.min(W-90,p.x-40))+'px';deposit.style.top=Math.max(55,Math.min(H-42,p.y-65))+'px'}}else deposit.style.display='none'}
 let seed=44;function rnd(){seed=(seed*1664525+1013904223)>>>0;return seed/4294967296}
-for(let i=0;i<165;i++){let x=50+rnd()*(world.w-100),y=50+rnd()*(world.h-100);if(Math.hypot(x-base.x,y-base.y)>250)trees.push({x,y})}
-for(let i=0;i<42;i++){let x=50+rnd()*(world.w-100),y=50+rnd()*(world.h-100);if(Math.hypot(x-base.x,y-base.y)>240)rocks.push({x,y})}
+for(let i=0;i<165;i++){let x=50+rnd()*(world.w-100),y=50+rnd()*(world.h-100);if(Math.hypot(x-base.x,y-base.y)>250)trees.push({x,y,scale:.8+rnd()*.6})}
+for(let i=0;i<42;i++){let x=50+rnd()*(world.w-100),y=50+rnd()*(world.h-100);if(Math.hypot(x-base.x,y-base.y)>240)rocks.push({x,y,scale:.75+rnd()*.8})}
 function resize(){dpr=Math.min(devicePixelRatio||1,2);W=innerWidth;H=innerHeight;canvas.width=W*dpr;canvas.height=H*dpr;ctx.setTransform(dpr,0,0,dpr,0,0)}addEventListener('resize',resize);resize();
 function worldPt(sx,sy){const a=(sx-W/2)/zoom,b=(sy-H/2)/zoom;return{x:cam.x+a+b*.48,y:cam.y+b/.68}}
 function screenPt(x,y){return{x:W/2+((x-cam.x)-.48*.68*(y-cam.y))*zoom,y:H/2+(y-cam.y)*.68*zoom}}
@@ -101,7 +101,7 @@ let selectedBuilding=null,selectedMarine=null,selectedTroop=null;
 function haptic(){if(navigator.vibrate)navigator.vibrate(12)}
 function findTarget(p){let soldier=troops().find(u=>!u.garrison&&Math.hypot(p.x-u.x,p.y-u.y)<36);if(soldier)return{kind:soldier.kind||'marine',value:soldier};for(const [kind,arr] of [['shop',shops],['bunker',bunkers],['turret',turrets]]){const b=arr.find(v=>Math.hypot(p.x-v.x,p.y-v.y)<53);if(b)return{kind,value:b}}let bar=barracks.find(b=>Math.hypot(p.x-b.x,p.y-b.y)<65);if(bar)return{kind:'barracks',value:bar};let u=units.find(u=>Math.hypot(p.x-u.x,p.y-u.y)<30);if(u)return{kind:'unit',value:u};if(Math.hypot(p.x-base.x,p.y-base.y)<55)return{kind:'base'};let m=minerals.find(m=>m.n>0&&Math.hypot(p.x-m.x,p.y-m.y)<43);if(m)return{kind:'mineral',value:m};let d=depots.find(d=>Math.hypot(p.x-d.x,p.y-d.y)<36);if(d)return{kind:'depot',value:d};return null}
 function selectAt(p){commandMode=null;placing=false;ghost=null;buildMenu=false;let t=findTarget(p);selectedMineral=null;selectedBuilding=null;selectedMarine=null;selectedTroop=null;if(!t){selected=null;msg('Nothing selected')}else if(t.kind==='unit'){selected=t.value.id;msg('SCV selected. Choose an action below.')}else if(t.kind==='depot'){selected='depot';selectedBuilding=t.value;msg('Supply Depot selected')}else if(t.kind==='barracks'){selected='barracks';selectedBuilding=t.value;msg('Barracks selected')}else if(['marine','firebat','goliath','tank'].includes(t.kind)){selected=t.kind;selectedTroop=t.value;selectedMarine=t.kind==='marine'?t.value:null;msg(t.kind+' selected')}else if(['shop','bunker','turret'].includes(t.kind)){selected=t.kind;selectedBuilding=t.value;msg(t.kind+' selected')}else if(t.kind==='base'){selected='base';msg('Command Center selected. Train SCVs in the queue.')}else if(t.kind==='mineral'){selected=null;selectedMineral=t.value;msg('Mineral deposit: '+t.value.n+'/1000 remaining')}else{selected=null;msg('Nothing selected')}buttons();haptic()}
-function validSite(p){return p.x>70&&p.y>70&&p.x<world.w-70&&p.y<world.h-70&&Math.hypot(p.x-base.x,p.y-base.y)>=135&&[...depots,...barracks,...shops,...bunkers,...turrets].every(d=>Math.hypot(p.x-d.x,p.y-d.y)>=100)&&minerals.every(m=>m.n<=0||Math.hypot(p.x-m.x,p.y-m.y)>=75)}
+function validSite(p){return p.x>70&&p.y>70&&p.x<world.w-70&&p.y<world.h-70&&Math.hypot(p.x-base.x,p.y-base.y)>=135&&[...depots,...barracks,...shops,...bunkers,...turrets].every(d=>Math.hypot(p.x-d.x,p.y-d.y)>=100)&&minerals.every(m=>m.n<=0||Math.hypot(p.x-m.x,p.y-m.y)>=75)&&trees.every(t=>Math.hypot(p.x-t.x,p.y-t.y)>=56*(t.scale||1))&&rocks.every(r=>Math.hypot(p.x-r.x,p.y-r.y)>=52*(r.scale||1))}
 function order(p){if(placing){const cost=costs[buildType];if(money<cost){placing=false;buildType=null;ghost=null;updatePlacementControls();buttons();msg('Not enough minerals');return}if(!validSite(p)){ghost=p;msg('Red ghost: choose open ground away from buildings or minerals');return}const u=selectedUnit();if(!u)return;money-=cost;const stats=BUILDING_STATS[buildType];const b={x:p.x,y:p.y,progress:0,hp:1,maxHp:stats.hp,damage:stats.damage,range:stats.range,attackCooldown:stats.cooldown,attackTimer:0,type:buildType,marineQueue:0,trainTime:0,training:[],garrison:[]};({depot:depots,barracks,shop:shops,bunker:bunkers,turret:turrets})[buildType].push(b);u.task='construct';u.building=b;u.mineMode=null;placing=false;ghost=null;buildType=null;updatePlacementControls();msg('SCV constructing '+names[b.type]);buttons();return}
 const u=selectedUnit(),t=findTarget(p);
 if(commandMode==='marineMove'&&selectedTroop){if(selectedTroop.sieged){msg('Unsiege first');return}if(t?.kind==='bunker'&&selected==='marine'&&t.value.progress>=1&&t.value.garrison.length<4){selectedTroop.task='enter';selectedTroop.targetBunker=t.value;msg('Marine entering bunker')}else{selectedTroop.tx=p.x;selectedTroop.ty=p.y;selectedTroop.task='move';msg('Unit moving')}commandMode=null;buttons();return}if(!u){msg('Tap an SCV or Command Center to select it');haptic();return}
@@ -163,11 +163,34 @@ function sprite(key,x,y,width,height,opacity=1){
 }
 function poly(points,fill,stroke='#142a2b',width=2){ctx.beginPath();ctx.moveTo(points[0][0],points[0][1]);for(let i=1;i<points.length;i++)ctx.lineTo(...points[i]);ctx.closePath();ctx.fillStyle=fill;ctx.fill();ctx.strokeStyle=stroke;ctx.lineWidth=width;ctx.stroke()}
 function box3(x,y,w,h,tall,front='#42585d',top='#85979a',side='#273c44'){poly([[x-w,y-h],[x+w,y-h],[x+w+15,y-h+9],[x+15,y-h+9]],top);poly([[x-w,y-h],[x+15,y-h+9],[x+15,y+tall],[x-w,y+tall-9]],front);poly([[x+15,y-h+9],[x+w+15,y-h+9],[x+w+15,y+tall-9],[x+15,y+tall]],side)}
+// Procedural raised obstacles with distinct illuminated, shadowed and top faces.
+function groundShadow(x,y,rx,ry){ctx.save();ctx.fillStyle='#081c17aa';ctx.beginPath();ctx.ellipse(x+13,y+13,rx,ry,-.15,0,Math.PI*2);ctx.fill();ctx.restore()}
+function tree3(t){
+ const x=t.x,y=t.y,k=t.scale||1;ctx.save();ctx.translate(x,y);ctx.scale(k,k);
+ groundShadow(0,0,27,13);
+ poly([[-6,3],[-7,-34],[4,-38],[8,3]],'#654932','#312f25',1.5);
+ poly([[4,-38],[12,-32],[10,1],[8,3]],'#302d24','#25291e',1);
+ for(let i=2;i>=0;i--){const yy=-42-i*18,ww=31-i*6;
+  poly([[-ww,yy+16],[-ww*.68,yy-4],[0,yy-31],[ww*.72,yy-3],[ww,yy+16],[0,yy+26]],i===0?'#27543b':i===1?'#35704a':'#48835a','#163b30',1.6);
+  poly([[0,yy-31],[ww*.72,yy-3],[ww,yy+16],[0,yy+26]],i===0?'#1b4535':i===1?'#23563e':'#306d4a','#1a4132',1);
+  poly([[-ww*.68,yy-4],[0,yy-31],[ww*.22,yy-13],[-ww*.28,yy+5]],'#6a9a69','#3d7150',.8);
+ }
+ ctx.restore()
+}
+function rock3(r){
+ const x=r.x,y=r.y,k=r.scale||1;ctx.save();ctx.translate(x,y);ctx.scale(k,k);groundShadow(0,0,30,13);
+ poly([[-29,5],[-26,-17],[-12,-37],[9,-39],[26,-20],[30,3],[9,13],[-15,12]],'#46534e','#263832',2);
+ poly([[-29,5],[-26,-17],[-12,-37],[-5,-13],[-10,11]],'#6e8074','#34493f',1.5);
+ poly([[-12,-37],[9,-39],[26,-20],[4,-12],[-5,-13]],'#a4aea0','#526359',1.5);
+ poly([[4,-12],[26,-20],[30,3],[9,13],[-10,11],[-5,-13]],'#4b5b56','#34443d',1.5);
+ poly([[-12,-37],[-2,-28],[9,-39]],'#c5c6ac','#8b9788',.8);
+ ctx.strokeStyle='#303e3b';ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(4,-12);ctx.lineTo(12,-3);ctx.lineTo(9,13);ctx.stroke();
+ ctx.restore()
+}
 function crystal(x,y,k=1){ctx.save();ctx.translate(x,y);ctx.scale(k,k);poly([[-22,8],[-12,-23],[-3,-37],[6,-14],[14,8]],'#247ea9','#8ce8fa');poly([[-3,-37],[6,-14],[14,8],[2,4]],'#3bc3ec','#b5f6ff');poly([[5,11],[17,-12],[27,-20],[32,4]],'#197aaf','#8de6ff');ctx.restore()}
 function figurine(x,y,marine=false){ctx.save();ctx.translate(x,y);ctx.fillStyle='#061b1c99';ctx.beginPath();ctx.ellipse(0,12,23,9,0,0,7);ctx.fill();if(marine){poly([[-12,-2],[-8,-23],[6,-27],[16,-8],[10,10],[-10,10]],'#5e8390','#0a2c34');poly([[-6,-25],[3,-33],[11,-23],[8,-12]],'#c5d6ce');poly([[7,-7],[27,-17],[30,-12],[9,1]],'#202e33');poly([[-12,9],[-2,9],[-2,17],[-15,17]],'#344c56');poly([[5,9],[15,9],[15,17],[5,17]],'#344c56')}else{poly([[-17,-5],[-11,-27],[9,-29],[19,-6],[12,13],[-14,13]],'#b28c47','#473c2c');poly([[-10,-28],[0,-37],[12,-26],[7,-15]],'#c6b77d');poly([[-20,-9],[-31,0],[-28,16],[-15,10]],'#7c8d8a');poly([[18,-11],[32,-4],[27,17],[14,10]],'#829a98');poly([[-14,12],[-3,12],[-5,21],[-17,21]],'#394c4a');poly([[5,12],[16,12],[17,21],[5,21]],'#394c4a')}ctx.restore()}
 function draw(){ctx.clearRect(0,0,W,H);ctx.fillStyle='#1c322b';ctx.fillRect(0,0,W,H);ctx.save();ctx.translate(W/2-cam.x*zoom+cam.y*.3264*zoom,H/2-cam.y*.68*zoom);ctx.scale(zoom,zoom);ctx.transform(1,0,-.3264,.68,0,0);ctx.fillStyle='#52694b';ctx.fillRect(0,0,world.w,world.h);ctx.strokeStyle='#78936b33';ctx.lineWidth=1;for(let x=0;x<world.w;x+=100){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,world.h);ctx.stroke()}for(let y=0;y<world.h;y+=100){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(world.w,y);ctx.stroke()}
-for(const t of trees){ctx.fillStyle='#253f31';ctx.beginPath();ctx.ellipse(t.x,t.y,17,10,0,0,7);ctx.fill();poly([[t.x-15,t.y],[t.x,t.y-44],[t.x+17,t.y]],'#28583c','#163f31');poly([[t.x-12,t.y-13],[t.x,t.y-55],[t.x+12,t.y-13]],'#427c51')}
-for(const r of rocks)poly([[r.x-18,r.y+8],[r.x-14,r.y-8],[r.x+2,r.y-18],[r.x+19,r.y-2],[r.x+15,r.y+9]],'#7a8174','#354e4b');
+for(const o of [...trees.map(v=>({kind:'tree',v})),...rocks.map(v=>({kind:'rock',v}))].sort((a,b)=>a.v.y-b.v.y)){if(o.kind==='tree')tree3(o.v);else rock3(o.v)}
 for(const m of minerals)if(m.n>0){if(!sprite('minerals',m.x,m.y+15,78,77,Math.max(.55,m.n/1000)))crystal(m.x,m.y,Math.max(.5,Math.sqrt(m.n/1000)));}
 if(selectedMineral&&selectedMineral.n>0){ctx.strokeStyle='#a3ffd4';ctx.lineWidth=3;ctx.beginPath();ctx.ellipse(selectedMineral.x,selectedMineral.y+10,34,17,0,0,7);ctx.stroke()}
 if(!sprite('command_center',base.x,base.y+46,180,165)){box3(base.x,base.y,48,43,28,'#526d75','#91a8a9','#314e5c');box3(base.x,base.y-18,25,20,20,'#526f7c','#bec9b8','#304a5b');ctx.fillStyle='#67c5ed';ctx.fillRect(base.x-22,base.y-12,14,9);ctx.fillRect(base.x+17,base.y-12,14,9)}
