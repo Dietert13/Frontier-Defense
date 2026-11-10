@@ -35,7 +35,7 @@
  #infoDetails{font-size:10px}
 }
 </style></head>
-<body><canvas id="game"></canvas><div id="hud"><span>💎 <b id="minerals">200</b></span><span>👥 <b id="supply">1 / 10</b></span><span>🏢 Frontier Defense v1.9</span></div><div id="hint">PC: Left-click select · Right-click order · Drag select · WASD pan · Esc deselect. Touch controls remain available.</div><div id="deposit"></div><div id="placementControls"><button id="confirmPlacement" aria-label="Confirm building position">✓</button><button id="cancelPlacement" aria-label="Cancel building placement">✕</button></div><div id="bottomHud"><div id="controls"><canvas class="panel" id="map" width="210" height="164"></canvas></div><div id="infoPanel"><div id="infoName">NO SELECTION</div><div id="infoBody"><div id="infoPortrait">⌖</div><div id="infoDetails">Tap a unit or building</div></div><div id="infoQueue"></div></div><div id="commandPanel"><div id="panelTitle">COMMANDS</div><div id="actions"></div><div id="production"><h3>Production</h3><div id="slots"></div><button id="train">🔧 Train SCV · 💎 50 · 10s</button></div></div></div>
+<body><canvas id="game"></canvas><div id="hud"><span>💎 <b id="minerals">200</b></span><span>👥 <b id="supply">1 / 10</b></span><span>🏢 Frontier Defense v2.0</span><span id="waveStatus">PREP 2:00 · Wave 1</span></div><div id="hint">PC: Left-click select · Right-click order · Drag select · WASD pan · Esc deselect. Touch controls remain available.</div><div id="deposit"></div><div id="placementControls"><button id="confirmPlacement" aria-label="Confirm building position">✓</button><button id="cancelPlacement" aria-label="Cancel building placement">✕</button></div><div id="bottomHud"><div id="controls"><canvas class="panel" id="map" width="210" height="164"></canvas></div><div id="infoPanel"><div id="infoName">NO SELECTION</div><div id="infoBody"><div id="infoPortrait">⌖</div><div id="infoDetails">Tap a unit or building</div></div><div id="infoQueue"></div></div><div id="commandPanel"><div id="panelTitle">COMMANDS</div><div id="actions"></div><div id="production"><h3>Production</h3><div id="slots"></div><button id="train">🔧 Train SCV · 💎 50 · 10s</button></div></div></div>
 <script>
 (()=>{'use strict';
 const canvas=document.querySelector('#game'),ctx=canvas.getContext('2d'),mini=document.querySelector('#map'),mc=mini.getContext('2d'),actions=document.querySelector('#actions'),hint=document.querySelector('#hint'),production=document.querySelector('#production'),slots=document.querySelector('#slots'),train=document.querySelector('#train'),deposit=document.querySelector('#deposit');
@@ -202,14 +202,57 @@ mini.addEventListener('pointerdown',e=>{let r=mini.getBoundingClientRect();cam.x
 function approach(u,x,y,speed,dt){let dx=x-u.x,dy=y-u.y,d=Math.hypot(dx,dy);if(d<=speed*dt){u.x=x;u.y=y;return true}u.x+=dx/d*speed*dt;u.y+=dy/d*speed*dt;return false}
 
 /* Combat effects and lightweight enemy wave simulation. */
-const enemies=[],effects=[];let waveClock=0,waveNumber=0;
+const enemies=[],effects=[];
+let waveNumber=0,phase='prep',phaseTimer=120,spawnRemaining=0,spawnTimer=0,spawnIndex=0,waveTotal=0;
+function waveCount(n){return Math.min(6+Math.floor((n-1)*2.5),85)}
+function enemyKind(n,i){
+ if(n===20)return 'queen_of_blades';
+ if(n>=10&&i%9===0)return 'ultralisk';
+ if(n>=5&&i%4===0)return 'hydralisk';
+ return 'zergling';
+}
+function spawnEnemy(kind,i){
+ const st=combatStats(kind),edge=(i+waveNumber)%4,spread=Math.random();
+ const x=edge===0?35:edge===1?world.w-35:spread*world.w;
+ const y=edge===2?35:edge===3?world.h-35:spread*world.h;
+ enemies.push({kind,x,y,hp:st.hp,maxHp:st.hp,cool:Math.random(),speed:st.speed});
+}
+function startWave(){
+ waveNumber++;phase='wave';phaseTimer=0;spawnIndex=0;
+ waveTotal=waveNumber===20?1:waveCount(waveNumber);
+ spawnRemaining=waveTotal;spawnTimer=0;
+ msg(waveNumber===20?'BOSS WAVE 20: Queen of Blades!':'Wave '+waveNumber+' incoming: '+waveTotal+' enemies');
+}
+function advanceWaves(dt){
+ if(phase==='prep'||phase==='intermission'){
+  phaseTimer-=dt;
+  if(phaseTimer<=0)startWave();
+ }else if(phase==='wave'){
+  spawnTimer-=dt;
+  // A wave enters over time rather than all enemies arriving in one frame.
+  while(spawnRemaining>0&&spawnTimer<=0){
+   spawnEnemy(enemyKind(waveNumber,spawnIndex),spawnIndex);
+   spawnIndex++;spawnRemaining--;
+   spawnTimer+=Math.max(.5,1.8-waveNumber*.035);
+  }
+  if(spawnRemaining===0&&enemies.length===0){
+   if(waveNumber===20){phase='victory';msg('Queen of Blades defeated! You survived 20 waves!')}
+   else{phase='intermission';phaseTimer=Math.min(25+waveNumber*3,75);msg('Wave '+waveNumber+' cleared! Prepare for wave '+(waveNumber+1))}
+  }
+ }
+ const hud=document.querySelector('#waveStatus');
+ if(hud){
+  const clock=Math.max(0,Math.ceil(phaseTimer));
+  const time=Math.floor(clock/60)+':'+String(clock%60).padStart(2,'0');
+  hud.textContent=phase==='prep'?'PREP '+time+' · Wave 1':phase==='intermission'?'NEXT WAVE '+(waveNumber+1)+' · '+time:phase==='victory'?'VICTORY · 20/20':'WAVE '+waveNumber+'/20 · '+(spawnRemaining+enemies.length)+' LEFT';
+ }
+}
 function fx(type,x,y,angle=0,size=1){if(effects.length>220)effects.shift();effects.push({type,x,y,angle,size,age:0,life:type==='heal'?.75:type==='acid'?.5:type==='blast'?.48:type==='flame'?.3:.17})}
 function hit(target,damage){target.hp=Math.max(0,target.hp-damage);fx('impact',target.x,target.y-15,0,1)}
 function closestEnemy(x,y,range){let best=null,dist=range;for(const e of enemies){if(e.hp<=0)continue;const d=Math.hypot(e.x-x,e.y-y);if(d<dist){best=e;dist=d}}return best}
 function fireAt(source,target,kind,damage,originX=source.x,originY=source.y){const a=Math.atan2(target.y-originY,target.x-originX);let type=kind==='firebat'?'flame':kind==='hydralisk'?'acid':kind==='tank_siege'?'blast':kind==='medic'?'heal':kind==='melee'?'slash':'flash';fx(type,originX,originY-14,a,kind==='tank_siege'?2.1:kind==='tank'?1.4:1);if(kind==='tank_siege'||kind==='tank'||kind==='turret'||kind==='hydralisk'){fx(kind==='hydralisk'?'acid':'tracer',(originX+target.x)/2,(originY+target.y)/2,a,1)}hit(target,damage)}
 function combatStep(dt){
- waveClock+=dt;
- if(waveClock>24){waveClock=0;waveNumber++;const count=Math.min(4+waveNumber*2,22);for(let i=0;i<count;i++){const kind=waveNumber%5===0&&i===0?'ultralisk':waveNumber%3===0&&i%4===0?'hydralisk':'zergling',st=combatStats(kind),edge=i%4;const x=edge===0?35:edge===1?world.w-35:Math.random()*world.w,y=edge===2?35:edge===3?world.h-35:Math.random()*world.h;enemies.push({kind,x,y,hp:st.hp,maxHp:st.hp,cool:Math.random(),speed:st.speed})}msg('Enemy wave '+waveNumber+' incoming!')}
+ advanceWaves(dt);
  for(const m of troops()){if(m.garrison||m.hp<=0)continue;m.cool=(m.cool||0)-dt;const st=combatStats(m.kind,m.sieged),t=closestEnemy(m.x,m.y,st.range);if(t&&m.cool<=0){fireAt(m,t,m.kind==='tank'&&m.sieged?'tank_siege':m.kind,st.damage);m.cool=st.cooldown}}
  for(const b of bunkers){if(b.progress<1)continue;for(let i=0;i<b.garrison.length;i++){const m=b.garrison[i];m.cool=(m.cool||0)-dt;const t=closestEnemy(b.x,b.y,BUILDING_STATS.bunker.range);if(t&&m.cool<=0){const offsets=[[-27,-10],[25,-10],[-25,17],[24,17]];const [ox,oy]=offsets[i];fireAt(b,t,'marine',combatStats('marine').damage,b.x+ox,b.y+oy);m.cool=combatStats('marine').cooldown}}}
  for(const b of turrets){if(b.progress<1)continue;b.cool=(b.cool||0)-dt;const t=closestEnemy(b.x,b.y,BUILDING_STATS.turret.range);if(t&&b.cool<=0){fireAt(b,t,'turret',b.damage,b.x,b.y-25);b.cool=BUILDING_STATS.turret.cooldown}}
@@ -220,7 +263,7 @@ function combatStep(dt){
  for(let i=effects.length-1;i>=0;i--){effects[i].age+=dt;if(effects[i].age>=effects[i].life)effects.splice(i,1)}
 }
 function drawEffects(){
- for(const e of enemies){const key=e.kind;if(!sprite(key,e.x,e.y+12,key==='ultralisk'?110:55,key==='ultralisk'?105:65))figurine(e.x,e.y,true);ctx.fillStyle='#e85e65';ctx.fillRect(e.x-18,e.y-42,36*Math.max(0,e.hp/e.maxHp),4)}
+ for(const e of enemies){const key=e.kind;const big=key==='ultralisk'||key==='queen_of_blades';if(!sprite(key,e.x,e.y+12,key==='queen_of_blades'?120:big?110:55,key==='queen_of_blades'?150:big?105:65))figurine(e.x,e.y,true);ctx.fillStyle='#e85e65';ctx.fillRect(e.x-18,e.y-42,36*Math.max(0,e.hp/e.maxHp),4)}
  for(const f of effects){const t=f.age/f.life;ctx.save();ctx.translate(f.x,f.y);ctx.rotate(f.angle);ctx.globalAlpha=1-t;const k=f.size*(1+t*.4);ctx.scale(k,k);
  if(f.type==='heal'){ctx.rotate(-f.angle);ctx.fillStyle='#55ff88';ctx.shadowColor='#6aff9b';ctx.shadowBlur=9;ctx.fillRect(-3,-13-t*15,6,22);ctx.fillRect(-11,-5-t*15,22,6)}
  else if(f.type==='slash'){ctx.strokeStyle='#ffe6bb';ctx.lineWidth=4;ctx.beginPath();ctx.arc(0,0,18,-.9,.9);ctx.stroke()}
